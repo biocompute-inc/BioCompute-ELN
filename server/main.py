@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.db import Base, engine
 from core.share_middleware import ShareLinkAccessMiddleware
 from routes.auth import router as auth_router
+from routes.experiments import router as experiments_router
 from routes.share import router as share_router
 
 # Import models so SQLAlchemy metadata knows every table before create_all.
@@ -63,6 +64,7 @@ app.add_middleware(
 app.add_middleware(ShareLinkAccessMiddleware)
 
 app.include_router(auth_router)
+app.include_router(experiments_router)
 app.include_router(share_router)
 
 

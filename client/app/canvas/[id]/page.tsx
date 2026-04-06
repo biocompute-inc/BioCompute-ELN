@@ -201,6 +201,15 @@ type TableSource = {
     rows: string[][];
 };
 
+type ApiCanvasPayload = {
+    id: string;
+    title: string;
+    status: string;
+    tag?: string | null;
+    updated_at: string;
+    blocks: BlockData[];
+};
+
 function safeParse<T>(raw: string | null, fallback: T): T {
     if (!raw) return fallback;
     try {
@@ -212,6 +221,18 @@ function safeParse<T>(raw: string | null, fallback: T): T {
 
 function nowLabel() {
     return new Date().toLocaleString([], {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+function formatUpdatedLabel(rawIso: string) {
+    const date = new Date(rawIso);
+    if (Number.isNaN(date.getTime())) return nowLabel();
+    return date.toLocaleString([], {
         year: "numeric",
         month: "short",
         day: "2-digit",
@@ -1497,23 +1518,65 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
     useEffect(() => {
         if (typeof window === "undefined") return;
 
-        const canvasById = safeParse<StoredCanvasById>(sessionStorage.getItem(canvasesSessionKey), {});
-        const current = canvasById[canvasId];
+        let cancelled = false;
+        const hydrate = async () => {
+            const canvasById = safeParse<StoredCanvasById>(sessionStorage.getItem(canvasesSessionKey), {});
+            const current = canvasById[canvasId];
 
-        if (current?.blocks?.length) {
-            setBlocks(normalizeBlocks(current.blocks));
-            setConnections(current.connections || []);
-        } else {
-            const starter = normalizeBlocks(cloneStarterBlocks());
-            canvasById[canvasId] = { blocks: starter, connections: [] };
-            sessionStorage.setItem(canvasesSessionKey, JSON.stringify(canvasById));
-            setBlocks(starter);
-            setConnections([]);
-        }
+            if (token) {
+                try {
+                    const response = await fetch(`${API_BASE}/experiments/${encodeURIComponent(canvasId)}/canvas`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    });
 
-        setExperimentMeta(readExperimentMeta(canvasId, experimentsSessionKey));
-        setIsHydrated(true);
-    }, [canvasId, canvasesSessionKey, experimentsSessionKey]);
+                    if (response.ok) {
+                        const payload = (await response.json()) as ApiCanvasPayload;
+                        if (cancelled) return;
+
+                        const normalized = normalizeBlocks(Array.isArray(payload.blocks) ? payload.blocks : []);
+                        setBlocks(normalized);
+                        setConnections([]);
+                        setExperimentMeta({
+                            id: payload.id,
+                            title: payload.title || "Untitled",
+                            status: payload.status || "active",
+                            updated: formatUpdatedLabel(payload.updated_at),
+                            tags: payload.tag ? [payload.tag] : [],
+                        });
+
+                        canvasById[canvasId] = { blocks: normalized, connections: [] };
+                        sessionStorage.setItem(canvasesSessionKey, JSON.stringify(canvasById));
+                        setIsHydrated(true);
+                        return;
+                    }
+                } catch {
+                    // Fall through to session storage hydration.
+                }
+            }
+
+            if (current?.blocks?.length) {
+                setBlocks(normalizeBlocks(current.blocks));
+                setConnections(current.connections || []);
+            } else {
+                const starter = normalizeBlocks(cloneStarterBlocks());
+                canvasById[canvasId] = { blocks: starter, connections: [] };
+                sessionStorage.setItem(canvasesSessionKey, JSON.stringify(canvasById));
+                setBlocks(starter);
+                setConnections([]);
+            }
+
+            setExperimentMeta(readExperimentMeta(canvasId, experimentsSessionKey));
+            setIsHydrated(true);
+        };
+
+        hydrate();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [canvasId, canvasesSessionKey, experimentsSessionKey, token]);
 
     const persistCanvasState = useCallback((manual = false) => {
         if (!isHydrated) return false;
@@ -2173,7 +2236,7 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
         setConnections(prev => prev.filter(conn => !selectedIds.includes(conn.fromId) && !selectedIds.includes(conn.toId)));
     }, [selectedIds]);
 
-    const saveExperimentMetadata = useCallback(() => {
+    const saveExperimentMetadata = useCallback(async () => {
         const savedAt = nowLabel();
         const experiments = safeParse<Array<Record<string, unknown>>>(sessionStorage.getItem(experimentsSessionKey), []);
         const hasCurrent = experiments.some(exp => String(exp.id) === canvasId);
@@ -2208,15 +2271,73 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
         sessionStorage.setItem(experimentsSessionKey, JSON.stringify(next));
         window.dispatchEvent(new Event(EXPERIMENTS_CHANGED_EVENT));
         setExperimentMeta(prev => ({ ...prev, updated: savedAt }));
-        emitToast({ message: "Experiment metadata saved", kind: "success" });
-    }, [blocks.length, canvasId, experimentMeta, experimentsSessionKey]);
 
-    const saveCanvasNow = useCallback(() => {
-        const ok = persistCanvasState(true);
-        if (ok) {
-            emitToast({ message: "Canvas saved", kind: "success" });
+        if (token) {
+            try {
+                await fetch(`${API_BASE}/experiments/${encodeURIComponent(canvasId)}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        title: experimentMeta.title,
+                        status: experimentMeta.status,
+                        tag: experimentMeta.tags?.[0] || null,
+                    }),
+                });
+            } catch {
+                emitToast({ message: "Metadata saved locally only", kind: "error" });
+            }
         }
-    }, [persistCanvasState]);
+
+        emitToast({ message: "Experiment metadata saved", kind: "success" });
+    }, [blocks.length, canvasId, experimentMeta, experimentsSessionKey, token]);
+
+    const saveCanvasToApi = useCallback(async () => {
+        if (!token) return false;
+
+        try {
+            const response = await fetch(`${API_BASE}/experiments/${encodeURIComponent(canvasId)}/canvas`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    blocks: blocksRef.current.map((block) => ({
+                        id: block.id,
+                        type: block.type,
+                        x: block.x,
+                        y: block.y,
+                        w: block.w,
+                        h: block.h,
+                        data: block.data,
+                        locked: block.locked,
+                        collapsed: block.collapsed,
+                        hidden: block.hidden,
+                        theme: block.theme,
+                    })),
+                }),
+            });
+
+            return response.ok;
+        } catch {
+            return false;
+        }
+    }, [canvasId, token]);
+
+    const saveCanvasNow = useCallback(async () => {
+        const ok = persistCanvasState(true);
+        const apiOk = await saveCanvasToApi();
+
+        if (ok && (apiOk || !token)) {
+            emitToast({ message: "Canvas saved", kind: "success" });
+            return;
+        }
+
+        emitToast({ message: "Saved locally, but backend save failed", kind: "error" });
+    }, [persistCanvasState, saveCanvasToApi, token]);
 
     const generateShareLink = useCallback(async () => {
         if (!token) {

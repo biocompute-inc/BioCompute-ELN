@@ -20,6 +20,8 @@ import { T, mono } from "../theme";
 import { emitToast } from "../lib/ui-events";
 import { useAuth } from "../context/AuthContext";
 
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+
 type ExperimentRow = {
   id: string;
   title: string;
@@ -31,6 +33,15 @@ type ExperimentRow = {
   blocks: number;
   collaborators: string[];
   templateId?: string | null;
+};
+
+type ApiExperimentItem = {
+  id: string;
+  title: string;
+  status: string;
+  tag?: string | null;
+  block_count: number;
+  updated_at: string;
 };
 
 type TemplateIconKey = "note" | "protocol" | "result" | "image" | "template";
@@ -65,6 +76,18 @@ function nowLabel() {
   });
 }
 
+function formatUpdatedLabel(rawIso: string) {
+  const date = new Date(rawIso);
+  if (Number.isNaN(date.getTime())) return nowLabel();
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function renderTemplateIcon(icon: string, color: string) {
   const iconProps = { size: 16, color, strokeWidth: 2 };
   const key = icon as TemplateIconKey;
@@ -77,7 +100,7 @@ function renderTemplateIcon(icon: string, color: string) {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const experimentsCacheRef = useRef<{ key: string; raw: string | null; snapshot: ExperimentRow[] | null }>({
     key: "",
     raw: null,
@@ -172,6 +195,46 @@ export default function Dashboard() {
     };
     window.dispatchEvent(new Event(EXPERIMENTS_CHANGED_EVENT));
   }, [experimentsSessionKey]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    let cancelled = false;
+    const fetchExperiments = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/experiments`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as ApiExperimentItem[];
+        if (cancelled) return;
+
+        const mapped: ExperimentRow[] = payload.map((item) => ({
+          id: item.id,
+          title: item.title,
+          tag: item.tag || "General",
+          labels: item.tag ? [item.tag] : ["General"],
+          preview: "",
+          status: item.status || "active",
+          updated: formatUpdatedLabel(item.updated_at),
+          blocks: Number(item.block_count || 0),
+          collaborators: ["SR"],
+          templateId: null,
+        }));
+        writeExperimentsToSession(mapped);
+      } catch {
+        // Keep existing session state when backend is unavailable.
+      }
+    };
+
+    fetchExperiments();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, writeExperimentsToSession]);
   const experiments = useSyncExternalStore<ExperimentRow[]>(
     (onStoreChange) => {
       if (typeof window === "undefined") return () => { };
@@ -340,32 +403,81 @@ export default function Dashboard() {
     router.push(`/canvas/${exp.id}`);
   };
 
-  const handleCreate = (title: string, mode: string, templateId: string | null) => {
+  const handleCreate = async (title: string, mode: string, templateId: string | null) => {
     const cleanTitle = title.trim();
     if (!cleanTitle) return;
 
     const resolvedTemplateId = mode === "template" ? (templateId || templates[0]?.id || null) : null;
     const initialBlocks = mode === "template" ? cloneTemplateBlocks(resolvedTemplateId) : [];
 
-    const newExp = {
-      id: `exp-${Date.now()}`,
-      title: cleanTitle,
-      tag: "New",
-      status: "active",
-      updated: nowLabel(),
-      blocks: initialBlocks.length,
-      collaborators: ["SR"],
-      templateId: resolvedTemplateId,
-      labels: ["New"],
-      preview: "New experiment created from dashboard",
-    };
+    let newExp: ExperimentRow;
+
+    if (token) {
+      try {
+        const response = await fetch(`${API_BASE}/experiments`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: cleanTitle,
+            status: "active",
+            tag: "New",
+            blocks: initialBlocks,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("create failed");
+        }
+
+        const payload = (await response.json()) as {
+          id: string;
+          title: string;
+          status: string;
+          tag?: string | null;
+          updated_at: string;
+          blocks: unknown[];
+        };
+
+        newExp = {
+          id: payload.id,
+          title: payload.title,
+          tag: payload.tag || "New",
+          status: payload.status || "active",
+          updated: formatUpdatedLabel(payload.updated_at),
+          blocks: Array.isArray(payload.blocks) ? payload.blocks.length : initialBlocks.length,
+          collaborators: ["SR"],
+          templateId: resolvedTemplateId,
+          labels: [payload.tag || "New"],
+          preview: "New experiment created from dashboard",
+        };
+      } catch {
+        emitToast({ message: "Could not create experiment in backend", kind: "error" });
+        return;
+      }
+    } else {
+      newExp = {
+        id: `exp-${Date.now()}`,
+        title: cleanTitle,
+        tag: "New",
+        status: "active",
+        updated: nowLabel(),
+        blocks: initialBlocks.length,
+        collaborators: ["SR"],
+        templateId: resolvedTemplateId,
+        labels: ["New"],
+        preview: "New experiment created from dashboard",
+      };
+    }
 
     const currentCanvases = safeParse<CanvasStore>(sessionStorage.getItem(canvasesSessionKey), {});
     currentCanvases[newExp.id] = { blocks: initialBlocks };
     sessionStorage.setItem(canvasesSessionKey, JSON.stringify(currentCanvases));
 
     writeExperimentsToSession([newExp, ...experiments]);
-    setOpenTabs(prev => [newExp.id, ...prev.filter(id => id !== newExp.id && existingIds.has(id))].slice(0, 6));
+    setOpenTabs(prev => [newExp.id, ...prev.filter(id => id !== newExp.id)].slice(0, 6));
     setShowNew(false);
     emitToast({ message: `Created experiment: ${cleanTitle}`, kind: "success" });
     router.push(`/canvas/${newExp.id}`);
@@ -376,23 +488,55 @@ export default function Dashboard() {
     if (effectiveActiveTab === id) setActiveTab("all");
   };
 
-  const handleStatusChange = (id: string, status: string) => {
+  const handleStatusChange = async (id: string, status: string) => {
     const next = experiments.map(exp =>
       exp.id === id
         ? { ...exp, status, updated: nowLabel() }
         : exp
     );
     writeExperimentsToSession(next);
+
+    if (token) {
+      try {
+        await fetch(`${API_BASE}/experiments/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
+        });
+      } catch {
+        // Keep optimistic local state.
+      }
+    }
+
     emitToast({ message: `Status updated to ${status}`, kind: "info" });
   };
 
-  const handleLabelsChange = (id: string, labels: string[]) => {
+  const handleLabelsChange = async (id: string, labels: string[]) => {
     const next = experiments.map(exp =>
       exp.id === id
         ? { ...exp, labels, tag: labels[0] || exp.tag, updated: nowLabel() }
         : exp
     );
     writeExperimentsToSession(next);
+
+    if (token) {
+      try {
+        await fetch(`${API_BASE}/experiments/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ tag: labels[0] || null }),
+        });
+      } catch {
+        // Keep optimistic local state.
+      }
+    }
+
     emitToast({ message: "Labels updated", kind: "info" });
   };
 
