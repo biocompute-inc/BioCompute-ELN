@@ -508,22 +508,22 @@ function MeasurementBlock({ data, onChange }: { data: BlockData["data"]; onChang
             />
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {rows.map((row: any, i: number) => (
-                    <div key={row.id || i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 6, alignItems: "center" }}>
+                    <div key={row.id || i} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) 64px 20px", gap: 6, alignItems: "center" }}>
                         <input value={row.key || ""} onChange={e => {
                             const next = [...rows];
                             next[i] = { ...row, key: e.target.value };
                             onChange({ rows: next });
-                        }} placeholder="Metric" style={{ border: `1px solid ${C.border}`, borderRadius: 4, padding: "6px 8px", fontSize: 11, fontFamily: FONT_SANS, outline: "none" }} />
+                        }} placeholder="Metric" style={{ width: "100%", minWidth: 0, border: `1px solid ${C.border}`, borderRadius: 4, padding: "6px 8px", fontSize: 11, fontFamily: FONT_SANS, outline: "none" }} />
                         <input value={row.value || ""} onChange={e => {
                             const next = [...rows];
                             next[i] = { ...row, value: e.target.value };
                             onChange({ rows: next });
-                        }} placeholder="Value" style={{ border: `1px solid ${C.border}`, borderRadius: 4, padding: "6px 8px", fontSize: 11, fontFamily: FONT_SANS, outline: "none" }} />
+                        }} placeholder="Value" style={{ width: "100%", minWidth: 0, border: `1px solid ${C.border}`, borderRadius: 4, padding: "6px 8px", fontSize: 11, fontFamily: FONT_SANS, outline: "none" }} />
                         <input value={row.unit || ""} onChange={e => {
                             const next = [...rows];
                             next[i] = { ...row, unit: e.target.value };
                             onChange({ rows: next });
-                        }} placeholder="Unit" style={{ width: 66, border: `1px solid ${C.border}`, borderRadius: 4, padding: "6px 8px", fontSize: 11, fontFamily: FONT_SANS, outline: "none" }} />
+                        }} placeholder="Unit" style={{ width: "100%", minWidth: 0, border: `1px solid ${C.border}`, borderRadius: 4, padding: "6px 8px", fontSize: 11, fontFamily: FONT_SANS, outline: "none" }} />
                         <button className="tool-btn" onClick={() => onChange({ rows: rows.filter((_: any, idx: number) => idx !== i) })} style={{ color: C.red, fontSize: 14 }}>×</button>
                     </div>
                 ))}
@@ -1801,7 +1801,6 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
 
     const startBlockDrag = (id: string, e: React.MouseEvent) => {
         if (e.button !== 0) return;
-        if (activeTool === "pan") return;
         e.stopPropagation();
         const block = blocks.find(b => b.id === id);
         if (!block || block.locked) return;
