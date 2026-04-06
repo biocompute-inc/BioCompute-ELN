@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --bc-bg: #f5f4f0;
+  --bc-surface: #ffffff;
+  --bc-sidebar: #111110;
+  --bc-sidebar-b: #1a1a18;
+  --bc-border: #e2e0d8;
+  --bc-border-dk: #2a2a28;
+  --bc-text: #1a1a18;
+  --bc-text-mid: #666660;
+  --bc-text-light: #9a9a94;
+  --bc-text-inv: #f5f4f0;
+  --bc-green: #1a5c3a;
+  --bc-green-l: #eaf4ee;
+  --bc-blue: #1d3a6b;
+  --bc-blue-l: #eaf0fa;
+  --bc-purple: #6b2d5e;
+  --bc-purple-l: #f5eaf3;
+  --bc-amber: #b45309;
+  --bc-amber-l: #fef3c7;
+  --bc-red: #991b1b;
+}
+
+:root[data-theme="dark"] {
+  --background: #111213;
+  --foreground: #eae8e3;
+  --bc-bg: #141618;
+  --bc-surface: #1b1f22;
+  --bc-sidebar: #0d0f11;
+  --bc-sidebar-b: #14171a;
+  --bc-border: #2a3138;
+  --bc-border-dk: #2d333b;
+  --bc-text: #eceae6;
+  --bc-text-mid: #b0b6bc;
+  --bc-text-light: #8b929a;
+  --bc-text-inv: #f4f2ef;
+  --bc-green: #53be82;
+  --bc-green-l: #193227;
+  --bc-blue: #77a5ff;
+  --bc-blue-l: #1a2742;
+  --bc-purple: #cb8fc0;
+  --bc-purple-l: #352235;
+  --bc-amber: #f5b14d;
+  --bc-amber-l: #3c2e17;
+  --bc-red: #ff7d7d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "Inter", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Inter", sans-serif;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.bc-toast-enter {
+  animation: bcToastIn 0.2s ease both;
+}
+
+@keyframes bcToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

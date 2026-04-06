@@ -1,0 +1,120 @@
+"use client";
+
+import { useState, useRef, useCallback, useEffect, use } from "react";
+import { useRouter } from "next/navigation";
+import { T, mono, serif } from "../../../theme";
+import { CANVAS_BLOCKS, EXPERIMENTS } from "../../../data/mock";
+import { Topbar } from "../../../components/Topbar";
+import { StatusPip } from "../../../components/StatusPip";
+import { CanvasBlock, BlockPalette, BlockData } from "../../../components/CanvasBlocks";
+
+export default function CanvasEditor({ params }: { params: Promise<{ id: string }> }) {
+    const resolvedParams = use(params);
+    const router = useRouter();
+    const [blocks, setBlocks] = useState<BlockData[]>(CANVAS_BLOCKS as BlockData[]);
+    const [selected, setSelected] = useState<string | null>(null);
+    const [zoom, setZoom] = useState(1);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+    const [panning, setPanning] = useState(false);
+    const panRef = useRef<{ x: number; y: number } | null>(null);
+    const canvasRef = useRef<HTMLDivElement>(null);
+
+    // Fallback if experiment not found
+    const experiment = EXPERIMENTS.find(e => e.id === resolvedParams.id) || EXPERIMENTS[0];
+    const updateBlock = useCallback((id: string, u: Partial<BlockData>) => setBlocks(p => p.map(b => b.id === id ? { ...b, ...u } : b)), []);
+    const onWheel = useCallback((e: WheelEvent) => {
+        e.preventDefault();
+        setZoom(z => Math.min(2, Math.max(0.35, z * (e.deltaY > 0 ? 0.92 : 1.08))));
+    }, []);
+
+    useEffect(() => {
+        const el = canvasRef.current;
+        if (el) el.addEventListener("wheel", onWheel, { passive: false });
+        return () => el?.removeEventListener("wheel", onWheel);
+    }, [onWheel]);
+
+    const onCMD = (e: React.MouseEvent) => {
+        if (e.target === canvasRef.current || (e.target instanceof Element && e.target.classList.contains("cvs"))) {
+            setSelected(null);
+            setPanning(true);
+            panRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+        }
+    };
+
+    const onCMV = (e: React.MouseEvent) => { if (panning && panRef.current) setPan({ x: e.clientX - panRef.current.x, y: e.clientY - panRef.current.y }); };
+    const onCMU = () => setPanning(false);
+
+    const addBlock = (type: string) => {
+        const b = { id: "b" + Date.now(), type, x: (200 - pan.x) / zoom, y: (120 - pan.y) / zoom, w: 280, data: {} };
+        setBlocks(p => [...p, b]);
+        setSelected(b.id);
+    };
+
+    return (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <Topbar
+                leftContent={
+                    <button onClick={() => router.push("/")} style={{ ...mono, fontSize: 11, color: T.textMid, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", borderRadius: 2 }}
+                        onMouseEnter={e => e.currentTarget.style.background = T.bg} onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                        Back
+                    </button>
+                }
+                title={
+                    <div style={{ ...serif, fontSize: 16, fontWeight: 300, color: T.text, letterSpacing: -0.2 }}>{experiment.title}</div>
+                }
+                rightContent={
+                    <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginRight: 10 }}>
+                            <StatusPip status={experiment.status} />
+                            <div style={{ ...mono, fontSize: 10, color: T.textLight }}>{experiment.updated}</div>
+                        </div>
+                        <div style={{ width: 1, height: 20, background: T.border, marginRight: 10 }} />
+                        {/* Zoom */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {([
+                                ["−", () => setZoom(z => Math.max(0.35, z - 0.1))],
+                                [`${Math.round(zoom * 100)}%`, null],
+                                ["+", () => setZoom(z => Math.min(2, z + 0.1))],
+                                ["⊡", () => { setZoom(1); setPan({ x: 0, y: 0 }); }]
+                            ] as [string, (() => void) | null][]).map(([l, fn], i) => (
+                                fn ? <button key={i} onClick={fn} style={{ ...mono, fontSize: i === 1 ? 10 : 13, color: T.textMid, background: "none", border: `1px solid ${T.border}`, borderRadius: 2, width: 26, height: 26, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{l}</button>
+                                    : <span key={i} style={{ ...mono, fontSize: 10, color: T.textLight, width: 34, textAlign: "center" }}>{l}</span>
+                            ))}
+                        </div>
+
+                        <div style={{ width: 1, height: 20, background: T.border, marginLeft: 10, marginRight: 6 }} />
+
+                        {selected && <button onClick={() => { setBlocks(p => p.filter(b => b.id !== selected)); setSelected(null); }}
+                            style={{ ...mono, fontSize: 10.5, padding: "5px 10px", border: `1px solid ${T.border}`, borderRadius: 2, background: "none", color: T.textLight, cursor: "pointer", marginLeft: 4 }}>
+                            delete</button>}
+
+                        <div style={{ width: 1, height: 20, background: T.border, marginLeft: 10, marginRight: 10 }} />
+                        <button style={{ ...mono, fontSize: 11, padding: "7px 14px", background: "none", border: `1px solid ${T.border}`, borderRadius: 3, color: T.textMid, cursor: "pointer" }}>Share</button>
+                    </>
+                }
+            />
+
+            {/* Canvas */}
+            <div ref={canvasRef} onMouseDown={onCMD} onMouseMove={onCMV} onMouseUp={onCMU} onMouseLeave={onCMU} className="cvs"
+                style={{
+                    flex: 1, position: "relative", overflow: "hidden", cursor: panning ? "grabbing" : "default",
+                    backgroundImage: `radial-gradient(circle, rgba(0,0,0,0.10) 1px, transparent 1px)`,
+                    backgroundSize: `${20 * zoom}px ${20 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px`,
+                    backgroundColor: T.bg
+                }}>
+                <div style={{ position: "absolute", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: 0, height: 0 }}>
+                    {blocks.map((b: BlockData) => (
+                        <div key={b.id} style={{ position: "absolute", left: b.x, top: b.y, width: b.w }} onClick={e => e.stopPropagation()}>
+                            <CanvasBlock block={b} isSelected={selected === b.id} onClick={() => setSelected(b.id || null)} onChange={updateBlock} onFocus={() => { }} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)" }}>
+                <BlockPalette onSelect={addBlock} />
+            </div>
+        </div>
+    );
+}
+
