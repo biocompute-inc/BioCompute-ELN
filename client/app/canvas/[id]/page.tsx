@@ -46,6 +46,7 @@ import { useAuth } from "../../../context/AuthContext";
 type SharePermission = "read" | "comment";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const EXPERIMENTS_CHANGED_EVENT = "biocompute:experiments-changed";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -487,8 +488,18 @@ function ObservationBlock({ data, onChange }: { data: BlockData["data"]; onChang
                 onChange={e => onChange({ text: e.target.value })}
                 placeholder="What did you observe?"
                 style={{
-                    width: "100%", background: "none", border: "none", outline: "none", resize: "none",
-                    fontFamily: FONT_SANS, fontSize: 12, color: C.text, lineHeight: 1.65, minHeight: 110, border: `1px solid ${C.border}`, borderRadius: 4, padding: "8px 10px"
+                    width: "100%",
+                    background: "none",
+                    outline: "none",
+                    resize: "none",
+                    fontFamily: FONT_SANS,
+                    fontSize: 12,
+                    color: C.text,
+                    lineHeight: 1.65,
+                    minHeight: 110,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 4,
+                    padding: "8px 10px",
                 }}
             />
         </div>
@@ -1464,6 +1475,27 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
 
     useEffect(() => {
         if (typeof window === "undefined") return;
+        if (!user?.id) return;
+
+        const guestExperimentsKey = getScopedSessionKey(SESSION_EXPERIMENTS_KEY, null);
+        const guestCanvasesKey = getScopedSessionKey(SESSION_CANVASES_KEY, null);
+        if (guestExperimentsKey === experimentsSessionKey && guestCanvasesKey === canvasesSessionKey) return;
+
+        const guestExperiments = safeParse<StoredExperiment[]>(sessionStorage.getItem(guestExperimentsKey), []);
+        const userExperiments = safeParse<StoredExperiment[]>(sessionStorage.getItem(experimentsSessionKey), []);
+        if (guestExperiments.length > 0 && userExperiments.length === 0) {
+            sessionStorage.setItem(experimentsSessionKey, JSON.stringify(guestExperiments));
+        }
+
+        const guestCanvases = safeParse<StoredCanvasById>(sessionStorage.getItem(guestCanvasesKey), {});
+        const userCanvases = safeParse<StoredCanvasById>(sessionStorage.getItem(canvasesSessionKey), {});
+        if (Object.keys(guestCanvases).length > 0 && Object.keys(userCanvases).length === 0) {
+            sessionStorage.setItem(canvasesSessionKey, JSON.stringify(guestCanvases));
+        }
+    }, [canvasesSessionKey, experimentsSessionKey, user?.id]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
 
         const canvasById = safeParse<StoredCanvasById>(sessionStorage.getItem(canvasesSessionKey), {});
         const current = canvasById[canvasId];
@@ -1486,7 +1518,7 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
     const persistCanvasState = useCallback((manual = false) => {
         if (!isHydrated) return false;
         setAutosaveState("saving");
-        const savedAt = manual ? nowLabel() : null;
+        const savedAt = nowLabel();
         const canvasById = safeParse<StoredCanvasById>(sessionStorage.getItem(canvasesSessionKey), {});
         canvasById[canvasId] = { blocks, connections };
 
@@ -1494,15 +1526,34 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
             sessionStorage.setItem(canvasesSessionKey, JSON.stringify(canvasById));
 
             const experiments = safeParse<StoredExperiment[]>(sessionStorage.getItem(experimentsSessionKey), []);
-            const nextExperiments = experiments.map(exp =>
-                exp.id === canvasId
-                    ? { ...exp, blocks: blocks.length, ...(savedAt ? { updated: savedAt } : {}) }
-                    : exp
-            );
+            const hasCurrent = experiments.some(exp => exp.id === canvasId);
+            const nextExperiments = hasCurrent
+                ? experiments.map(exp =>
+                    exp.id === canvasId
+                        ? {
+                            ...exp,
+                            title: experimentMeta.title || exp.title,
+                            status: experimentMeta.status || exp.status,
+                            blocks: blocks.length,
+                            updated: savedAt,
+                        }
+                        : exp
+                )
+                : [
+                    {
+                        id: canvasId,
+                        title: experimentMeta.title || "Untitled Experiment",
+                        status: experimentMeta.status || "active",
+                        blocks: blocks.length,
+                        updated: savedAt,
+                    },
+                    ...experiments,
+                ];
             sessionStorage.setItem(experimentsSessionKey, JSON.stringify(nextExperiments));
+            window.dispatchEvent(new Event(EXPERIMENTS_CHANGED_EVENT));
             setAutosaveState("saved");
             if (manual) {
-                setExperimentMeta(prev => ({ ...prev, updated: savedAt || prev.updated }));
+                setExperimentMeta(prev => ({ ...prev, updated: savedAt }));
                 setShowSavedModal(true);
             }
             return true;
@@ -2125,23 +2176,40 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
     const saveExperimentMetadata = useCallback(() => {
         const savedAt = nowLabel();
         const experiments = safeParse<Array<Record<string, unknown>>>(sessionStorage.getItem(experimentsSessionKey), []);
-        const next = experiments.map(exp =>
-            String(exp.id) === canvasId
-                ? {
-                    ...exp,
-                    title: experimentMeta.title,
-                    status: experimentMeta.status,
+        const hasCurrent = experiments.some(exp => String(exp.id) === canvasId);
+        const next = hasCurrent
+            ? experiments.map(exp =>
+                String(exp.id) === canvasId
+                    ? {
+                        ...exp,
+                        title: experimentMeta.title,
+                        status: experimentMeta.status,
+                        objective: experimentMeta.objective || "",
+                        owner: experimentMeta.owner || "",
+                        tags: experimentMeta.tags || [],
+                        blocks: blocks.length,
+                        updated: savedAt,
+                    }
+                    : exp
+            )
+            : [
+                {
+                    id: canvasId,
+                    title: experimentMeta.title || "Untitled Experiment",
+                    status: experimentMeta.status || "active",
                     objective: experimentMeta.objective || "",
                     owner: experimentMeta.owner || "",
                     tags: experimentMeta.tags || [],
+                    blocks: blocks.length,
                     updated: savedAt,
-                }
-                : exp
-        );
+                },
+                ...experiments,
+            ];
         sessionStorage.setItem(experimentsSessionKey, JSON.stringify(next));
+        window.dispatchEvent(new Event(EXPERIMENTS_CHANGED_EVENT));
         setExperimentMeta(prev => ({ ...prev, updated: savedAt }));
         emitToast({ message: "Experiment metadata saved", kind: "success" });
-    }, [canvasId, experimentMeta, experimentsSessionKey]);
+    }, [blocks.length, canvasId, experimentMeta, experimentsSessionKey]);
 
     const saveCanvasNow = useCallback(() => {
         const ok = persistCanvasState(true);

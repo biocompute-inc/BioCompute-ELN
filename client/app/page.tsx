@@ -91,6 +91,34 @@ export default function Dashboard() {
     () => getScopedSessionKey(SESSION_CANVASES_KEY, user?.id),
     [user?.id]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!user?.id) return;
+
+    const guestExperimentsKey = getScopedSessionKey(SESSION_EXPERIMENTS_KEY, null);
+    const guestCanvasesKey = getScopedSessionKey(SESSION_CANVASES_KEY, null);
+    if (guestExperimentsKey === experimentsSessionKey && guestCanvasesKey === canvasesSessionKey) return;
+
+    const guestExperiments = safeParse<ExperimentRow[]>(sessionStorage.getItem(guestExperimentsKey), []);
+    const userExperiments = safeParse<ExperimentRow[]>(sessionStorage.getItem(experimentsSessionKey), []);
+    if (guestExperiments.length > 0 && userExperiments.length === 0) {
+      const raw = JSON.stringify(guestExperiments);
+      sessionStorage.setItem(experimentsSessionKey, raw);
+      experimentsCacheRef.current = {
+        key: experimentsSessionKey,
+        raw,
+        snapshot: guestExperiments,
+      };
+      window.dispatchEvent(new Event(EXPERIMENTS_CHANGED_EVENT));
+    }
+
+    const guestCanvases = safeParse<CanvasStore>(sessionStorage.getItem(guestCanvasesKey), {});
+    const userCanvases = safeParse<CanvasStore>(sessionStorage.getItem(canvasesSessionKey), {});
+    if (Object.keys(guestCanvases).length > 0 && Object.keys(userCanvases).length === 0) {
+      sessionStorage.setItem(canvasesSessionKey, JSON.stringify(guestCanvases));
+    }
+  }, [canvasesSessionKey, experimentsSessionKey, user?.id]);
   const readExperimentsFromSession = useCallback(() => {
     if (typeof window === "undefined") return EXPERIMENTS as ExperimentRow[];
 
