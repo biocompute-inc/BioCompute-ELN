@@ -557,7 +557,7 @@ export default function Dashboard() {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <Topbar
-        title="Experiments"
+        title="Experiments | ELN by BioCompute"
         leftContent={
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {breadcrumb.map((item, idx) => (

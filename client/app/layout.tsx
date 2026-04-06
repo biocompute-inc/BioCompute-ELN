@@ -7,6 +7,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "BioCompute ELN",
   description: "Electronic Lab Notebook",
+  icons: {
+    icon: "/faviconfinal.png",
+    shortcut: "/faviconfinal.png",
+    apple: "/faviconfinal.png",
+  },
 };
 
 export default function RootLayout({

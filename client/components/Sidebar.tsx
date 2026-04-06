@@ -113,7 +113,7 @@ export function Sidebar({ isDarkMode = false, onToggleDarkMode }: SidebarProps) 
         <div style={{ width: 22, height: 22, background: T.textInv, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span style={{ ...mono, fontSize: 10, fontWeight: 700, color: T.sidebar }}>ℕ</span>
         </div>
-        {!isCollapsed && <span style={{ ...serif, fontSize: 15, fontWeight: 300, color: T.textInv, letterSpacing: -0.2 }}>notebook</span>}
+        {!isCollapsed && <span style={{ ...serif, fontSize: 15, fontWeight: 300, color: T.textInv, letterSpacing: -0.2 }}>ELN by BioCompute</span>}
         {!isCollapsed && <span style={{ ...mono, fontSize: 8.5, color: "#555552", marginLeft: "auto", padding: "2px 5px", border: "1px solid #333330", borderRadius: 2 }}>beta</span>}
         <button
           onClick={() => setIsCollapsed(v => !v)}

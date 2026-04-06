@@ -33,7 +33,7 @@ export default function LandingPage() {
             <header style={{ height: 66, borderBottom: `1px solid ${T.border}`, background: T.surface, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{ width: 24, height: 24, borderRadius: 4, background: T.sidebar, color: T.textInv, display: "flex", alignItems: "center", justifyContent: "center", ...mono, fontSize: 11, fontWeight: 700 }}>N</div>
-                    <span style={{ ...mono, fontSize: 13, letterSpacing: 1.2 }}>notebook</span>
+                    <span style={{ ...mono, fontSize: 13, letterSpacing: 1.2 }}>ELN by BioCompute</span>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                     <Link href="/login" style={{ ...mono, fontSize: 11, color: T.textMid, textDecoration: "none", border: `1px solid ${T.border}`, borderRadius: 4, padding: "7px 12px" }}>Log in</Link>
