@@ -188,12 +188,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!activeToken) return;
 
-        await fetch(`${API_BASE}/auth/jwt/logout`, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${activeToken}`,
-            },
-        });
+        try {
+            await fetch(`${API_BASE}/auth/jwt/logout`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${activeToken}`,
+                },
+            });
+        } catch {
+            // Local logout is already applied; ignore network failures.
+        }
     }, [token]);
 
     const value = useMemo(() => ({

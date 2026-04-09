@@ -41,6 +41,7 @@ import {
     readTemplateBlocksMap,
 } from "../../../data/mock";
 import { emitToast } from "../../../lib/ui-events";
+import { recordRecentlyOpenedExperiment } from "../../../lib/recent-opened";
 import { useAuth } from "../../../context/AuthContext";
 
 type SharePermission = "read" | "comment";
@@ -390,8 +391,10 @@ function readExperimentMeta(canvasId: string, experimentsSessionKey: string): Ex
 }
 
 // ─── Block components ────────────────────────────────────────────────────────
-function NoteBlock({ data, onChange }: { data: BlockData["data"]; onChange: (d: any) => void }) {
+function NoteBlock({ data, onChange, blockHeight }: { data: BlockData["data"]; onChange: (d: any) => void; blockHeight?: number }) {
     const [showSnippets, setShowSnippets] = useState(false);
+    const stretch = Math.max(0, (blockHeight ?? getEstimatedBlockHeight("note")) - getEstimatedBlockHeight("note"));
+    const textAreaHeight = 72 + stretch;
 
     const insertSnippet = (value: string) => {
         const current = String(data.text || "");
@@ -424,7 +427,8 @@ function NoteBlock({ data, onChange }: { data: BlockData["data"]; onChange: (d: 
                 style={{
                     width: "100%", background: "none", border: "none", outline: "none", resize: "none",
                     fontFamily: FONT_SANS, fontSize: 12, color: C.text, lineHeight: 1.65,
-                    minHeight: 72,
+                    minHeight: textAreaHeight,
+                    height: textAreaHeight,
                 }}
             />
             {showSnippets && (
@@ -449,8 +453,10 @@ function NoteBlock({ data, onChange }: { data: BlockData["data"]; onChange: (d: 
     );
 }
 
-function ProtocolBlock({ data, onChange }: { data: BlockData["data"]; onChange: (d: any) => void }) {
+function ProtocolBlock({ data, onChange, blockHeight }: { data: BlockData["data"]; onChange: (d: any) => void; blockHeight?: number }) {
     const steps = data.steps || [{ id: "s1", text: "" }];
+    const stretch = Math.max(0, (blockHeight ?? getEstimatedBlockHeight("protocol")) - getEstimatedBlockHeight("protocol"));
+    const stepsPanelMaxHeight = 128 + stretch;
     return (
         <div style={{ padding: "14px 16px" }}>
             <div style={{ fontFamily: FONT_LABEL, fontSize: 9, color: C.textDim, letterSpacing: 2, marginBottom: 6, textTransform: "uppercase" }}>Protocol Steps</div>
@@ -460,7 +466,7 @@ function ProtocolBlock({ data, onChange }: { data: BlockData["data"]; onChange: 
                 placeholder="Protocol Title..."
                 style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: FONT_SANS, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 10 }}
             />
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: stepsPanelMaxHeight, overflowY: "auto", paddingRight: 2 }}>
                 {steps.map((step: any, i: number) => (
                     <div key={step.id} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                         <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMid, paddingTop: 6 }}>{i + 1}.</div>
@@ -494,7 +500,9 @@ function ProtocolBlock({ data, onChange }: { data: BlockData["data"]; onChange: 
     );
 }
 
-function ObservationBlock({ data, onChange }: { data: BlockData["data"]; onChange: (d: any) => void }) {
+function ObservationBlock({ data, onChange, blockHeight }: { data: BlockData["data"]; onChange: (d: any) => void; blockHeight?: number }) {
+    const stretch = Math.max(0, (blockHeight ?? getEstimatedBlockHeight("observation")) - getEstimatedBlockHeight("observation"));
+    const textAreaHeight = 110 + stretch;
     return (
         <div style={{ padding: "14px 16px" }}>
             <div style={{ fontFamily: FONT_LABEL, fontSize: 9, color: C.textDim, letterSpacing: 2, marginBottom: 6, textTransform: "uppercase" }}>Observation</div>
@@ -517,7 +525,8 @@ function ObservationBlock({ data, onChange }: { data: BlockData["data"]; onChang
                     fontSize: 12,
                     color: C.text,
                     lineHeight: 1.65,
-                    minHeight: 110,
+                    minHeight: textAreaHeight,
+                    height: textAreaHeight,
                     border: `1px solid ${C.border}`,
                     borderRadius: 4,
                     padding: "8px 10px",
@@ -527,8 +536,10 @@ function ObservationBlock({ data, onChange }: { data: BlockData["data"]; onChang
     );
 }
 
-function MeasurementBlock({ data, onChange }: { data: BlockData["data"]; onChange: (d: any) => void }) {
+function MeasurementBlock({ data, onChange, blockHeight }: { data: BlockData["data"]; onChange: (d: any) => void; blockHeight?: number }) {
     const rows = data.rows || [{ id: "m1", key: "", value: "", unit: "" }];
+    const stretch = Math.max(0, (blockHeight ?? getEstimatedBlockHeight("measurement")) - getEstimatedBlockHeight("measurement"));
+    const rowsPanelMaxHeight = 116 + stretch;
     return (
         <div style={{ padding: "14px 16px" }}>
             <div style={{ fontFamily: FONT_LABEL, fontSize: 9, color: C.textDim, letterSpacing: 2, marginBottom: 6, textTransform: "uppercase" }}>Measurement</div>
@@ -538,7 +549,7 @@ function MeasurementBlock({ data, onChange }: { data: BlockData["data"]; onChang
                 placeholder="Measurement set title..."
                 style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: FONT_SANS, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 10 }}
             />
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: rowsPanelMaxHeight, overflowY: "auto", paddingRight: 2 }}>
                 {rows.map((row: any, i: number) => (
                     <div key={row.id || i} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) 64px 20px", gap: 6, alignItems: "center" }}>
                         <input value={row.key || ""} onChange={e => {
@@ -986,9 +997,11 @@ function RichTextBlock({ data, onChange }: { data: BlockData["data"]; onChange: 
     );
 }
 
-function DataTableBlock({ data, onChange }: { data: BlockData["data"]; onChange: (d: any) => void }) {
+function DataTableBlock({ data, onChange, blockHeight }: { data: BlockData["data"]; onChange: (d: any) => void; blockHeight?: number }) {
     const columns: string[] = Array.isArray(data.columns) && data.columns.length > 0 ? data.columns : ["A", "B", "C"];
     const rows: string[][] = Array.isArray(data.rows) && data.rows.length > 0 ? data.rows : [["", "", ""], ["", "", ""]];
+    const stretch = Math.max(0, (blockHeight ?? getEstimatedBlockHeight("datatable")) - getEstimatedBlockHeight("datatable"));
+    const tableRowsMaxHeight = 124 + stretch;
 
     const updateColumn = (idx: number, value: string) => {
         const next = [...columns];
@@ -1046,7 +1059,7 @@ function DataTableBlock({ data, onChange }: { data: BlockData["data"]; onChange:
                         />
                     ))}
                 </div>
-                <div style={{ maxHeight: 124, overflow: "auto" }}>
+                <div style={{ maxHeight: tableRowsMaxHeight, overflow: "auto" }}>
                     {rows.map((row, rIdx) => (
                         <div key={`r-${rIdx}`} style={{ display: "grid", gridTemplateColumns: `repeat(${columns.length}, minmax(90px, 1fr))`, borderBottom: rIdx < rows.length - 1 ? `1px solid ${C.border}` : "none" }}>
                             {columns.map((_, cIdx) => (
@@ -1274,11 +1287,13 @@ function CanvasBlock({
     onToggleCollapse: (id: string) => void;
 }) {
     const themeStyle = resolveBlockTheme(block.theme);
+    const blockHeight = getBlockHeight(block);
     const [isHovered, setIsHovered] = useState(false);
     const showChrome = isSelected || isHovered;
 
     return (
         <div
+            data-block-id={block.id}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             onMouseDown={e => {
@@ -1289,6 +1304,7 @@ function CanvasBlock({
             }}
             style={{
                 position: "absolute", left: block.x, top: block.y, width: block.w,
+                minHeight: block.collapsed ? 48 : (typeof block.h === "number" ? Math.max(120, block.h) : undefined),
                 background: themeStyle.bg,
                 border: `1px solid ${isSelected ? C.selectionBorder : themeStyle.border}`,
                 borderRadius: 6,
@@ -1389,11 +1405,11 @@ function CanvasBlock({
                 </div>
             ) : (
                 <>
-                    {block.type === "note" && <NoteBlock data={block.data} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
-                    {block.type === "protocol" && <ProtocolBlock data={block.data} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
-                    {block.type === "observation" && <ObservationBlock data={block.data} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
-                    {block.type === "measurement" && <MeasurementBlock data={block.data} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
-                    {block.type === "datatable" && <DataTableBlock data={block.data} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
+                    {block.type === "note" && <NoteBlock data={block.data} blockHeight={blockHeight} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
+                    {block.type === "protocol" && <ProtocolBlock data={block.data} blockHeight={blockHeight} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
+                    {block.type === "observation" && <ObservationBlock data={block.data} blockHeight={blockHeight} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
+                    {block.type === "measurement" && <MeasurementBlock data={block.data} blockHeight={blockHeight} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
+                    {block.type === "datatable" && <DataTableBlock data={block.data} blockHeight={blockHeight} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
                     {block.type === "image" && <ImageBlock data={block.data} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
                     {block.type === "tag" && <TagsBlock data={block.data} onChange={d => onChange(block.id, { data: { ...block.data, ...d } })} />}
                 </>
@@ -1460,7 +1476,7 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
     const [activeTool, setActiveTool] = useState<"select" | "pan">("select");
     const [showPalette, setShowPalette] = useState(false);
     const [showLibrary, setShowLibrary] = useState(true);
-    const [resizePreview, setResizePreview] = useState<{ id: string; width: number } | null>(null);
+    const [resizePreview, setResizePreview] = useState<{ id: string; width: number; height: number } | null>(null);
     const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
     const [historyInfo, setHistoryInfo] = useState({ canUndo: false, canRedo: false });
     const [showShortcuts, setShowShortcuts] = useState(false);
@@ -1475,7 +1491,7 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
     const [saveSelectionOnly, setSaveSelectionOnly] = useState(false);
     const panStartRef = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
     const dragRef = useRef<{ ids: string[]; startX: number; startY: number; origins: Record<string, { x: number; y: number }> } | null>(null);
-    const resizeRef = useRef<{ id: string; startX: number; initialWidth: number; minWidth: number } | null>(null);
+    const resizeRef = useRef<{ id: string; startX: number; startY: number; initialWidth: number; initialHeight: number; minWidth: number; minHeight: number } | null>(null);
     const selectionStartRef = useRef<{ additive: boolean } | null>(null);
     const blocksRef = useRef<BlockData[]>(blocks);
     const historyRef = useRef<BlockData[][]>([cloneBlocksState(blocks)]);
@@ -1545,6 +1561,13 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
                             updated: formatUpdatedLabel(payload.updated_at),
                             tags: payload.tag ? [payload.tag] : [],
                         });
+                        recordRecentlyOpenedExperiment(
+                            {
+                                id: payload.id,
+                                title: payload.title || "Untitled Experiment",
+                            },
+                            user?.id
+                        );
 
                         canvasById[canvasId] = { blocks: normalized, connections: [] };
                         sessionStorage.setItem(canvasesSessionKey, JSON.stringify(canvasById));
@@ -1567,7 +1590,15 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
                 setConnections([]);
             }
 
-            setExperimentMeta(readExperimentMeta(canvasId, experimentsSessionKey));
+            const meta = readExperimentMeta(canvasId, experimentsSessionKey);
+            setExperimentMeta(meta);
+            recordRecentlyOpenedExperiment(
+                {
+                    id: canvasId,
+                    title: meta.title || "Untitled Experiment",
+                },
+                user?.id
+            );
             setIsHydrated(true);
         };
 
@@ -1576,7 +1607,7 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
         return () => {
             cancelled = true;
         };
-    }, [canvasId, canvasesSessionKey, experimentsSessionKey, token]);
+    }, [canvasId, canvasesSessionKey, experimentsSessionKey, token, user?.id]);
 
     const persistCanvasState = useCallback((manual = false) => {
         if (!isHydrated) return false;
@@ -1945,14 +1976,24 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
         if (e.button !== 0) return;
         const block = blocks.find(b => b.id === id);
         if (!block || block.locked) return;
+        const blockElement = (e.currentTarget as HTMLElement | null)?.closest("[data-block-id]");
+        const renderedHeight = blockElement instanceof HTMLElement
+            ? blockElement.getBoundingClientRect().height / zoom
+            : getBlockHeight(block);
+        const initialHeight = Number.isFinite(renderedHeight) && renderedHeight > 0
+            ? renderedHeight
+            : getBlockHeight(block);
 
         setIsResizingBlock(true);
-        setResizePreview({ id, width: Math.round(block.w) });
+        setResizePreview({ id, width: Math.round(block.w), height: Math.round(initialHeight) });
         resizeRef.current = {
             id,
             startX: e.clientX,
+            startY: e.clientY,
             initialWidth: block.w,
+            initialHeight,
             minWidth: getMinWidthForType(block.type),
+            minHeight: 120,
         };
     };
 
@@ -1983,16 +2024,20 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
         if (isResizingBlock && resizeRef.current) {
             didTransformRef.current = true;
             const dx = (clientX - resizeRef.current.startX) / zoom;
+            const dy = (clientY - resizeRef.current.startY) / zoom;
             const rawWidth = resizeRef.current.initialWidth + dx;
+            const rawHeight = resizeRef.current.initialHeight + dy;
             const widthValue = snapToGrid ? Math.round(rawWidth / GRID_SIZE) * GRID_SIZE : rawWidth;
+            const heightValue = snapToGrid ? Math.round(rawHeight / GRID_SIZE) * GRID_SIZE : rawHeight;
             const nextWidth = Math.max(resizeRef.current.minWidth, widthValue);
+            const nextHeight = Math.max(resizeRef.current.minHeight, heightValue);
             const resizeId = resizeRef.current.id;
 
             cancelAnimationFrame(frameRef.current);
             frameRef.current = requestAnimationFrame(() =>
-                setBlocks(p => p.map(b => b.id === resizeId ? { ...b, w: nextWidth } : b))
+                setBlocks(p => p.map(b => b.id === resizeId ? { ...b, w: nextWidth, h: nextHeight } : b))
             );
-            setResizePreview({ id: resizeId, width: Math.round(nextWidth) });
+            setResizePreview({ id: resizeId, width: Math.round(nextWidth), height: Math.round(nextHeight) });
         }
         if (isSelecting && selectionStartRef.current) {
             const point = toCanvasPoint(clientX, clientY);
@@ -3009,7 +3054,7 @@ export default function CanvasEditor({ params }: { params: Promise<{ id: string 
                                 color: C.textMid,
                                 zIndex: 60,
                             }}>
-                                W {resizePreview.width}px
+                                W {resizePreview.width}px  H {resizePreview.height}px
                             </div>
                         )}
 

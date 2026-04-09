@@ -24,7 +24,7 @@ export default function RootLayout({
       <head>
         <style dangerouslySetInnerHTML={{ __html: FONTS }} />
       </head>
-      <body style={{ margin: 0, padding: 0, overflow: "hidden", background: T.bg }}>
+      <body style={{ margin: 0, padding: 0, background: T.bg }}>
         <AuthProvider>
           <style dangerouslySetInnerHTML={{
             __html: `

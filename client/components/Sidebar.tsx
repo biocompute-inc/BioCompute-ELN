@@ -14,9 +14,14 @@ import {
   Sun,
   LogOut,
 } from "lucide-react";
-import { T, mono, serif } from "../theme";
+import { T, mono } from "../theme";
 import { useAuth } from "../context/AuthContext";
 import { Avatar } from "./Avatar";
+import {
+  RECENTLY_OPENED_CHANGED_EVENT,
+  RecentlyOpenedExperiment,
+  readRecentlyOpenedExperiments,
+} from "../lib/recent-opened";
 
 const SIDEBAR_LAYOUT_KEY = "biocompute:sidebar-layout";
 const MIN_WIDTH = 170;
@@ -50,6 +55,7 @@ export function Sidebar({ isDarkMode = false, onToggleDarkMode }: SidebarProps) 
   const { user, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(() => readSidebarLayout().collapsed);
   const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarLayout().width);
+  const [recentlyOpened, setRecentlyOpened] = useState<RecentlyOpenedExperiment[]>([]);
   const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const navItems = [
@@ -58,15 +64,24 @@ export function Sidebar({ isDarkMode = false, onToggleDarkMode }: SidebarProps) 
     { id: "shared", icon: Share2, label: "Shared with me", path: "/shared" },
   ];
 
-  const RECENT = [
-    { id: "exp-1", title: "PCR Optimization" },
-    { id: "exp-2", title: "Western Blot" },
-    { id: "exp-3", title: "CRISPR Screen" },
-  ];
-
   useEffect(() => {
     sessionStorage.setItem(SIDEBAR_LAYOUT_KEY, JSON.stringify({ collapsed: isCollapsed, width: sidebarWidth }));
   }, [isCollapsed, sidebarWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncRecent = () => {
+      setRecentlyOpened(readRecentlyOpenedExperiments(user?.id));
+    };
+
+    syncRecent();
+    window.addEventListener(RECENTLY_OPENED_CHANGED_EVENT, syncRecent);
+
+    return () => {
+      window.removeEventListener(RECENTLY_OPENED_CHANGED_EVENT, syncRecent);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     const syncResponsive = () => {
@@ -110,29 +125,38 @@ export function Sidebar({ isDarkMode = false, onToggleDarkMode }: SidebarProps) 
     <div style={{ width: activeWidth, background: T.sidebar, display: "flex", flexDirection: "column", flexShrink: 0, borderRight: `1px solid ${T.borderDk}`, height: "100vh", position: "relative", transition: "width 0.16s" }}>
       {/* Logo */}
       <div style={{ height: 52, display: "flex", alignItems: "center", padding: isCollapsed ? "0 8px" : "0 18px", borderBottom: `1px solid ${T.borderDk}`, gap: 10 }}>
-        <div style={{ width: 22, height: 22, background: T.textInv, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ ...mono, fontSize: 10, fontWeight: 700, color: T.sidebar }}>ℕ</span>
+        <div style={{ width: 28, height: 28, background: T.blue, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ ...mono, fontSize: 13, fontWeight: 700, color: "#fff" }}>B</span>
         </div>
-        {!isCollapsed && <span style={{ ...serif, fontSize: 15, fontWeight: 300, color: T.textInv, letterSpacing: -0.2 }}>ELN by BioCompute</span>}
-        {!isCollapsed && <span style={{ ...mono, fontSize: 8.5, color: "#555552", marginLeft: "auto", padding: "2px 5px", border: "1px solid #333330", borderRadius: 2 }}>beta</span>}
+        {!isCollapsed && <div>
+          <div style={{ ...mono, fontSize: 12, fontWeight: 600, color: T.textInv, letterSpacing: -0.3 }}>BioCompute</div>
+          <div style={{ ...mono, fontSize: 8, color: "#a0a098", letterSpacing: 0.6, textTransform: "uppercase" }}>Lab</div>
+        </div>}
+        {!isCollapsed && <span style={{ ...mono, fontSize: 8, color: "#555552", marginLeft: "auto", padding: "2px 5px", border: "1px solid #333330", borderRadius: 2 }}>beta</span>}
         <button
           onClick={() => setIsCollapsed(v => !v)}
           title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           style={{
             marginLeft: "auto",
-            width: 22,
-            height: 22,
-            borderRadius: 3,
+            width: 28,
+            height: 28,
+            borderRadius: 6,
             border: `1px solid ${T.borderDk}`,
             background: "transparent",
             color: T.textInv,
             cursor: "pointer",
             fontSize: 11,
             lineHeight: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "all 0.3s ease"
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.blue; e.currentTarget.style.color = T.blue; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.borderDk; e.currentTarget.style.color = T.textInv; }}
         >
-          {isCollapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />}
+          {isCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
         </button>
       </div>
 
@@ -165,18 +189,24 @@ export function Sidebar({ isDarkMode = false, onToggleDarkMode }: SidebarProps) 
             Recent
           </div>
         )}
-        {!isCollapsed && RECENT.map(exp => (
+        {!isCollapsed && recentlyOpened.map(exp => (
           <button key={exp.id} style={{
             display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 3,
             background: "transparent", border: "1px solid transparent", cursor: "pointer", ...mono, fontSize: 10.5,
             color: "#B3B3AB", textAlign: "left", width: "100%", overflow: "hidden"
           }}
+            onClick={() => router.push(`/canvas/${encodeURIComponent(exp.id)}`)}
             onMouseEnter={e => e.currentTarget.style.color = "#F0EFE7"}
             onMouseLeave={e => e.currentTarget.style.color = "#B3B3AB"}>
             <span style={{ width: 12, display: "flex", justifyContent: "center", color: "#8D8D86" }}><Clock3 size={11} /></span>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{exp.title}</span>
           </button>
         ))}
+        {!isCollapsed && recentlyOpened.length === 0 && (
+          <div style={{ ...mono, fontSize: 10, color: "#8B8B84", padding: "2px 10px" }}>
+            No recent experiments yet
+          </div>
+        )}
       </nav>
 
       {/* Footer controls + user */}
@@ -190,15 +220,18 @@ export function Sidebar({ isDarkMode = false, onToggleDarkMode }: SidebarProps) 
               style={{
                 background: "none",
                 border: `1px solid ${T.borderDk}`,
-                borderRadius: 4,
+                borderRadius: 6,
                 cursor: "pointer",
                 color: T.textInv,
-                fontSize: 10,
-                padding: "4px 8px",
+                fontSize: 11,
+                padding: "6px 10px",
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
+                transition: "all 0.3s ease"
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.blue; e.currentTarget.style.color = T.blue; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.borderDk; e.currentTarget.style.color = T.textInv; }}
             >
               {isDarkMode ? <Sun size={12} /> : <Moon size={12} />}
               {isDarkMode ? "Light" : "Dark"}
@@ -209,15 +242,18 @@ export function Sidebar({ isDarkMode = false, onToggleDarkMode }: SidebarProps) 
               style={{
                 background: "none",
                 border: `1px solid ${T.borderDk}`,
-                borderRadius: 4,
+                borderRadius: 6,
                 cursor: "pointer",
-                color: "#B3B3AB",
-                fontSize: 10,
-                padding: "4px 8px",
+                color: "#b3b3ab",
+                fontSize: 11,
+                padding: "6px 10px",
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
+                transition: "all 0.3s ease"
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#ff4444"; e.currentTarget.style.color = "#ff4444"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.borderDk; e.currentTarget.style.color = "#b3b3ab"; }}
             >
               <LogOut size={12} />
               Logout

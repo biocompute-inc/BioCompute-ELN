@@ -78,6 +78,7 @@ class ShareReadResponse(BaseModel):
     token: str
     project_id: str
     title: str
+    shared_by: str | None = None
     permission_level: Literal["read", "comment"]
     created_at: datetime
     blocks: list[dict[str, Any]]
@@ -184,10 +185,18 @@ async def get_shared_project(
     raw_blocks = list((share_link.payload or {}).get("blocks", []))
     blocks = [sanitize_value(block) for block in raw_blocks] if share_link.permission_level == "read" else raw_blocks
 
+    shared_by: str | None = None
+    if share_link.owner_id is not None:
+        owner_result = await session.execute(select(User).where(User.id == share_link.owner_id))
+        owner = owner_result.scalar_one_or_none()
+        if owner is not None:
+            shared_by = (owner.full_name or owner.email or "").strip() or None
+
     return ShareReadResponse(
         token=share_link.token,
         project_id=share_link.project_id,
         title=share_link.title,
+        shared_by=shared_by,
         permission_level=share_link.permission_level,  # type: ignore[arg-type]
         created_at=share_link.created_at,
         blocks=blocks,
